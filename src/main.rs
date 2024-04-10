@@ -46,7 +46,7 @@ fn main() -> ! {
         board.uart.into(),
         uarte::Parity::EXCLUDED,
         uarte::Baudrate::BAUD115200);
-    let mut serial = serial_comms::UartePort { conn: serial };
+    let mut serial = serial_comms::UartePort::new(serial);
 
     // Set up i2c
     serial.write_str("Setting up i2c and imu interface...").unwrap();
