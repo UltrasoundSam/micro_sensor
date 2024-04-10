@@ -9,6 +9,9 @@ pub struct UartePort<T: Instance> {
 }
 
 impl<T: Instance> UartePort<T> {
+    pub fn new(conn: Uarte<T>) -> Self {
+        UartePort { conn }
+    }
 
     pub fn send_data(&mut self, measurement: Acceleration, timestamp: f64) {
         // Send timestamp data
