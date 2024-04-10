@@ -12,7 +12,6 @@ use microbit::{
 use lsm303agr::{
     AccelMode, AccelOutputDataRate, Lsm303agr
 };
-use core::fmt::Write;
 
 mod serial_comms;
 
@@ -42,14 +41,15 @@ fn main() -> ! {
     timer.enable_counter();
 
     // Setup Serial Connection
-    let mut serial = uarte::Uarte::new(
+    let serial = uarte::Uarte::new(
         board.UARTE0,
         board.uart.into(),
         uarte::Parity::EXCLUDED,
         uarte::Baudrate::BAUD115200);
+    let mut serial = serial_comms::UartePort { conn: serial };
 
     // Set up i2c
-    writeln!(serial, "Setting up i2c and imu interface...").unwrap();
+    serial.write_str("Setting up i2c and imu interface...").unwrap();
     let i2c =  Twim::new(board.TWIM0, board.i2c_internal.into(), FREQUENCY_A::K100);
 
     // Setup sensor
@@ -67,7 +67,7 @@ fn main() -> ! {
         // Read data
         let data = imu.acceleration().unwrap();
 
-        serial_comms::send_data(&data, &mut serial, &elapsed_time);
+        serial.send_data(data, elapsed_time);
         rprintln!("x: {}, y: {}, z {}", data.x_mg(), data.y_mg(), data.z_mg());
     }
 
@@ -88,12 +88,9 @@ fn main() -> ! {
             // Read data
             let data = imu.acceleration().unwrap();
 
-            // Send data
-            serial_comms::send_data(&data, &mut serial, &elapsed_time);
+            // Send dataW
+            serial.send_data(data, elapsed_time);
             rprintln!("{}", elapsed_time);
         }
-
-        // Check to see whether new message has arrived via uart, and parse
-        // if serial.
     }
 }
