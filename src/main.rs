@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+
 use cortex_m_rt::entry;
 use rtt_target::{rprintln, rtt_init_print};
 use panic_halt as _;
@@ -14,6 +15,7 @@ use lsm303agr::{
 };
 
 mod serial_comms;
+mod control;
 
 #[entry]
 fn main() -> ! {
@@ -57,6 +59,9 @@ fn main() -> ! {
     imu.init().unwrap();
     imu.set_accel_mode_and_odr(&mut delay, AccelMode::HighResolution, AccelOutputDataRate::Hz50).unwrap();
 
+    // Setup buttons
+    control::init_buttons(board.GPIOTE, board.buttons);
+
     if imu.accel_status().unwrap().xyz_new_data() {
         // Get current time
         current_time = timer.get_counter();
@@ -85,12 +90,14 @@ fn main() -> ! {
             previous_time = 0;
             elapsed_time += diff;
 
-            // Read data
-            let data = imu.acceleration().unwrap();
+            if control::get_state() {
+                // Read data
+                let data = imu.acceleration().unwrap();
 
-            // Send dataW
-            serial.send_data(data, elapsed_time);
-            rprintln!("{}", elapsed_time);
+                // Send dataW
+                serial.send_data(data, elapsed_time);
+                rprintln!("{}", elapsed_time);
+            }
         }
     }
 }
