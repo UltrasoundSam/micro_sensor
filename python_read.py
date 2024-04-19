@@ -28,10 +28,12 @@ def read_packet(conn: serial.Serial) -> tuple[float, int, int, int]:
     # Now we have a correctly formatted packet, we can unpack it
     # as (f64, u8, f64, f64, f64, char[u8], char[u8])
     try:
-        result = struct.unpack('>dB3d2c', buff)
+        # d - double (f64), B - unsigned char, c - char.
+        struct_fmt = '>dB3d2c'
+        result = struct.unpack(struct_fmt, buff)
     except struct.error:
         # Just going to be setup message at the start,
-        # can justi gnore it for now
+        # can just ignore it for now
         return
 
     # Discard last two items (\r\n)
