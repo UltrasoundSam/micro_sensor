@@ -90,13 +90,13 @@ fn main() -> ! {
             previous_time = 0;
             elapsed_time += diff;
 
-            if control::get_state() {
+            if control::get_meas_state() {
                 // Read data
                 let data = imu.acceleration().unwrap();
 
                 // Send dataW
                 serial.send_data(data, elapsed_time);
-                rprintln!("{}", elapsed_time);
+                rprintln!("{}", control::get_num_aves());
             }
         }
     }
