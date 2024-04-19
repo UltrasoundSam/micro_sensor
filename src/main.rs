@@ -11,11 +11,12 @@ use microbit::{
 };
 
 use lsm303agr::{
-    AccelMode, AccelOutputDataRate, Lsm303agr
+    AccelMode, AccelOutputDataRate, Lsm303agr, MagMode, MagOutputDataRate,
 };
 
 mod serial_comms;
 mod control;
+mod average;
 
 #[entry]
 fn main() -> ! {
@@ -54,15 +55,21 @@ fn main() -> ! {
     serial.write_str("Setting up i2c and imu interface...").unwrap();
     let i2c =  Twim::new(board.TWIM0, board.i2c_internal.into(), FREQUENCY_A::K100);
 
-    // Setup sensor
-    let mut imu = Lsm303agr::new_with_i2c(i2c);
-    imu.init().unwrap();
-    imu.set_accel_mode_and_odr(&mut delay, AccelMode::HighResolution, AccelOutputDataRate::Hz50).unwrap();
+    // Setup accelerometer and magnetometer sensors
+    let mut sensor = Lsm303agr::new_with_i2c(i2c);
+    sensor.init().unwrap();
+    sensor.set_accel_mode_and_odr(&mut delay, AccelMode::HighResolution, AccelOutputDataRate::Hz50).unwrap();
+    sensor.set_mag_mode_and_odr(&mut delay, MagMode::HighResolution, MagOutputDataRate::Hz50).unwrap();
+    let mut sensor = sensor.into_mag_continuous().ok().unwrap();
 
     // Setup buttons
     control::init_buttons(board.GPIOTE, board.buttons);
 
-    if imu.accel_status().unwrap().xyz_new_data() {
+    // Create Struct to hold average values
+    let num_averages = control::get_num_aves();
+    let mut aves = average::SimpleMovingAverage::new(num_averages);
+
+    if sensor.accel_status().unwrap().xyz_new_data() {
         // Get current time
         current_time = timer.get_counter();
         diff = (current_time - previous_time) as f64 / clock_freq;
@@ -70,10 +77,13 @@ fn main() -> ! {
         elapsed_time += diff;
 
         // Read data
-        let data = imu.acceleration().unwrap();
+        let acc_data = sensor.acceleration().unwrap();
+        let mag_data = sensor.magnetic_field().unwrap();
+        aves.add_acceleration(acc_data);
+        aves.add_magnetic(mag_data);
 
-        serial.send_data(data, elapsed_time);
-        rprintln!("x: {}, y: {}, z {}", data.x_mg(), data.y_mg(), data.z_mg());
+        serial.send_data(elapsed_time, &aves);
+        rprintln!("x: {}, y: {}, z {}", acc_data.x_mg(), acc_data.y_mg(), acc_data.z_mg());
     }
 
     // Update time just before loop
@@ -82,6 +92,20 @@ fn main() -> ! {
     previous_time = current_time;
     elapsed_time += diff;
     loop {
+        // Check if acceleration data is available
+        if sensor.accel_status().unwrap().xyz_new_data() {
+            // If it is, let's take a measurement
+            let acc_data = sensor.acceleration().unwrap();
+            aves.add_acceleration(acc_data);
+        }
+
+        // Check if magnetic field data is available
+        if sensor.mag_status().unwrap().xyz_new_data() {
+            // If it iss, let's take a measurement
+            let mag_data = sensor.magnetic_field().unwrap();
+            aves.add_magnetic(mag_data);
+        }
+
         current_time = timer.get_counter();
         diff = (current_time - previous_time) as f64 / clock_freq;
         if diff >= interval as f64 {
@@ -90,13 +114,14 @@ fn main() -> ! {
             previous_time = 0;
             elapsed_time += diff;
 
-            if control::get_state() {
-                // Read data
-                let data = imu.acceleration().unwrap();
+            if control::get_meas_state() {
+                // Send data
+                serial.send_data(elapsed_time, &aves);
 
-                // Send dataW
-                serial.send_data(data, elapsed_time);
-                rprintln!("{}", elapsed_time);
+                // Create new averages
+                let num_averages = control::get_num_aves();
+                rprintln!("{}",num_averages);
+                aves.update_size(num_averages);
             }
         }
     }
