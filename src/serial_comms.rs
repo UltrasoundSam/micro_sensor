@@ -11,11 +11,13 @@ impl<T: Instance> UartePort<T> {
         UartePort { conn }
     }
 
-    pub fn send_data(&mut self, measurement: (f64, f64, f64), timestamp: f64) {
+    pub fn send_data(&mut self, measurement: (f64, f64, f64),
+        timestamp: f64, averages: u8) {
         // Send timestamp data
         self.conn.write(&timestamp.to_be_bytes()).unwrap();
 
         // Send bytes
+        self.conn.write(&averages.to_be_bytes()).unwrap();
         self.conn.write(&measurement.0.to_be_bytes()).unwrap();
         self.conn.write(&measurement.1.to_be_bytes()).unwrap();
         self.conn.write(&measurement.2.to_be_bytes()).unwrap();

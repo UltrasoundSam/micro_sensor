@@ -78,7 +78,7 @@ fn main() -> ! {
         let data = imu.acceleration().unwrap();
         aves.add_measurement(data);
 
-        serial.send_data(aves.get_average(), elapsed_time);
+        serial.send_data(aves.get_average(), elapsed_time, aves.num_aves);
         rprintln!("x: {}, y: {}, z {}", data.x_mg(), data.y_mg(), data.z_mg());
     }
 
@@ -108,7 +108,7 @@ fn main() -> ! {
                 let ave_data = aves.get_average();
 
                 // Send data
-                serial.send_data(ave_data, elapsed_time);
+                serial.send_data(ave_data, elapsed_time, aves.num_aves);
 
                 // Create new averages
                 let num_averages = control::get_num_aves();
@@ -120,7 +120,7 @@ fn main() -> ! {
 }
 
 struct SimpleMovingAverage {
-    number: u8,
+    num_aves: u8,
     acc_x: Vec<i32, 255>,
     acc_y: Vec<i32, 255>,
     acc_z: Vec<i32, 255>,
@@ -129,7 +129,7 @@ struct SimpleMovingAverage {
 impl SimpleMovingAverage {
     fn new(size: u8) -> SimpleMovingAverage {
         SimpleMovingAverage {
-            number: size,
+            num_aves: size,
             acc_x: Vec::new(),
             acc_y: Vec::new(),
             acc_z: Vec::new()
@@ -146,7 +146,7 @@ impl SimpleMovingAverage {
         self.acc_z.push(values.2).unwrap();
 
         // Check to see if we have exceeded number of averages
-        if self.acc_x.len() as u8 > self.number {
+        if self.acc_x.len() as u8 > self.num_aves {
             self.acc_x.remove(0);
             self.acc_y.remove(0);
             self.acc_z.remove(0);
@@ -154,7 +154,7 @@ impl SimpleMovingAverage {
     }
 
     fn update_size(&mut self, new_size: u8) {
-        self.number = new_size;
+        self.num_aves = new_size;
     }
 
     fn get_average(&self) -> (f64, f64, f64) {

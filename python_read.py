@@ -13,7 +13,8 @@ def read_packet(conn: serial.Serial) -> tuple[float, int, int, int]:
         conn (Serial): an open Serial object
 
     Returns:
-        packet (tuple): Data packet tuple (timestamp, acc_x, acc_y, acc_z)
+        packet (tuple): Data packet tuple (timestamp, num_aves, acc_x,
+                                           acc_y, acc_z)
     '''
     buff = bytearray()
     while True:
@@ -25,9 +26,9 @@ def read_packet(conn: serial.Serial) -> tuple[float, int, int, int]:
         buff.extend(conn.read())
 
     # Now we have a correctly formatted packet, we can unpack it
-    # as (f64, f64, f64, f64, char[u8], char[8])
+    # as (f64, u8, f64, f64, f64, char[u8], char[u8])
     try:
-        result = struct.unpack('>4d2c', buff)
+        result = struct.unpack('>dB3d2c', buff)
     except struct.error:
         # Just going to be setup message at the start,
         # can justi gnore it for now
