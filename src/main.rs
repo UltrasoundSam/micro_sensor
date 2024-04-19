@@ -4,7 +4,6 @@
 use cortex_m_rt::entry;
 use rtt_target::{rprintln, rtt_init_print};
 use panic_halt as _;
-use heapless::Vec;
 
 use microbit::{
     hal::{twim::Twim, uarte, Delay, Rtc},
@@ -12,11 +11,12 @@ use microbit::{
 };
 
 use lsm303agr::{
-    AccelMode, AccelOutputDataRate, Lsm303agr, Acceleration
+    AccelMode, AccelOutputDataRate, Lsm303agr, MagMode, MagOutputDataRate,
 };
 
 mod serial_comms;
 mod control;
+mod average;
 
 #[entry]
 fn main() -> ! {
@@ -55,19 +55,21 @@ fn main() -> ! {
     serial.write_str("Setting up i2c and imu interface...").unwrap();
     let i2c =  Twim::new(board.TWIM0, board.i2c_internal.into(), FREQUENCY_A::K100);
 
-    // Setup sensor
-    let mut imu = Lsm303agr::new_with_i2c(i2c);
-    imu.init().unwrap();
-    imu.set_accel_mode_and_odr(&mut delay, AccelMode::HighResolution, AccelOutputDataRate::Hz50).unwrap();
+    // Setup accelerometer and magnetometer sensors
+    let mut sensor = Lsm303agr::new_with_i2c(i2c);
+    sensor.init().unwrap();
+    sensor.set_accel_mode_and_odr(&mut delay, AccelMode::HighResolution, AccelOutputDataRate::Hz50).unwrap();
+    sensor.set_mag_mode_and_odr(&mut delay, MagMode::HighResolution, MagOutputDataRate::Hz50).unwrap();
+    let mut sensor = sensor.into_mag_continuous().ok().unwrap();
 
     // Setup buttons
     control::init_buttons(board.GPIOTE, board.buttons);
 
     // Create Struct to hold average values
     let num_averages = control::get_num_aves();
-    let mut aves = SimpleMovingAverage::new(num_averages);
+    let mut aves = average::SimpleMovingAverage::new(num_averages);
 
-    if imu.accel_status().unwrap().xyz_new_data() {
+    if sensor.accel_status().unwrap().xyz_new_data() {
         // Get current time
         current_time = timer.get_counter();
         diff = (current_time - previous_time) as f64 / clock_freq;
@@ -75,11 +77,13 @@ fn main() -> ! {
         elapsed_time += diff;
 
         // Read data
-        let data = imu.acceleration().unwrap();
-        aves.add_measurement(data);
+        let acc_data = sensor.acceleration().unwrap();
+        let mag_data = sensor.magnetic_field().unwrap();
+        aves.add_acceleration(acc_data);
+        aves.add_magnetic(mag_data);
 
-        serial.send_data(aves.get_average(), elapsed_time, aves.num_aves);
-        rprintln!("x: {}, y: {}, z {}", data.x_mg(), data.y_mg(), data.z_mg());
+        serial.send_data(elapsed_time, &aves);
+        rprintln!("x: {}, y: {}, z {}", acc_data.x_mg(), acc_data.y_mg(), acc_data.z_mg());
     }
 
     // Update time just before loop
@@ -88,11 +92,18 @@ fn main() -> ! {
     previous_time = current_time;
     elapsed_time += diff;
     loop {
-        // Check if data is available
-        if imu.accel_status().unwrap().xyz_new_data() {
+        // Check if acceleration data is available
+        if sensor.accel_status().unwrap().xyz_new_data() {
             // If it is, let's take a measurement
-            let data = imu.acceleration().unwrap();
-            aves.add_measurement(data);
+            let acc_data = sensor.acceleration().unwrap();
+            aves.add_acceleration(acc_data);
+        }
+
+        // Check if magnetic field data is available
+        if sensor.mag_status().unwrap().xyz_new_data() {
+            // If it iss, let's take a measurement
+            let mag_data = sensor.magnetic_field().unwrap();
+            aves.add_magnetic(mag_data);
         }
 
         current_time = timer.get_counter();
@@ -104,11 +115,8 @@ fn main() -> ! {
             elapsed_time += diff;
 
             if control::get_meas_state() {
-                // Read data
-                let ave_data = aves.get_average();
-
                 // Send data
-                serial.send_data(ave_data, elapsed_time, aves.num_aves);
+                serial.send_data(elapsed_time, &aves);
 
                 // Create new averages
                 let num_averages = control::get_num_aves();
@@ -116,57 +124,5 @@ fn main() -> ! {
                 aves.update_size(num_averages);
             }
         }
-    }
-}
-
-struct SimpleMovingAverage {
-    num_aves: u8,
-    acc_x: Vec<i32, 255>,
-    acc_y: Vec<i32, 255>,
-    acc_z: Vec<i32, 255>,
-}
-
-impl SimpleMovingAverage {
-    fn new(size: u8) -> SimpleMovingAverage {
-        SimpleMovingAverage {
-            num_aves: size,
-            acc_x: Vec::new(),
-            acc_y: Vec::new(),
-            acc_z: Vec::new()
-        }
-    }
-
-    fn add_measurement(&mut self, measurement: Acceleration) {
-        // Get values
-        let values = measurement.xyz_mg();
-
-        // Push values onto vec
-        self.acc_x.push(values.0).unwrap();
-        self.acc_y.push(values.1).unwrap();
-        self.acc_z.push(values.2).unwrap();
-
-        // Check to see if we have exceeded number of averages
-        if self.acc_x.len() as u8 > self.num_aves {
-            self.acc_x.remove(0);
-            self.acc_y.remove(0);
-            self.acc_z.remove(0);
-        }
-    }
-
-    fn update_size(&mut self, new_size: u8) {
-        self.num_aves = new_size;
-    }
-
-    fn get_average(&self) -> (f64, f64, f64) {
-        let sum_x = self.acc_x.iter().fold(0, |acc, x| acc+x);
-        let sum_y = self.acc_y.iter().fold(0, |acc, x| acc+x);
-        let sum_z = self.acc_z.iter().fold(0, |acc, x| acc+x);
-
-        let num_elems = self.acc_x.len() as f64;
-        let ave_x = sum_x as f64 / num_elems;
-        let ave_y = sum_y as f64 / num_elems;
-        let ave_z = sum_z as f64 / num_elems;
-        let result = (ave_x, ave_y, ave_z);
-        result
     }
 }
