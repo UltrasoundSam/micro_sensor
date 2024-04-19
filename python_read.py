@@ -25,9 +25,9 @@ def read_packet(conn: serial.Serial) -> tuple[float, int, int, int]:
         buff.extend(conn.read())
 
     # Now we have a correctly formatted packet, we can unpack it
-    # as (f32, i32, i32, i32, char[u8], char[8])
+    # as (f64, f64, f64, f64, char[u8], char[8])
     try:
-        result = struct.unpack('>d3i2c', buff)
+        result = struct.unpack('>4d2c', buff)
     except struct.error:
         # Just going to be setup message at the start,
         # can justi gnore it for now
