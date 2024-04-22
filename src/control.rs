@@ -22,7 +22,7 @@ pub(crate) fn init_buttons(board_gpiote: pac::GPIOTE, board_buttons: Buttons) {
         .enable_interrupt();
     channel0.reset_events();
 
-    // Linking button a to channel0. Trigger interrupt off a falling edge .
+    // Linking button b to channel1. Trigger interrupt off a falling edge .
     let channel1 = gpiote.channel1();
     channel1
         .input_pin(&board_buttons.button_b.degrade())
@@ -84,4 +84,3 @@ pub struct Measuring {
     pub active: bool,
     pub num_aves: u8
 }
-
