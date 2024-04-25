@@ -7,7 +7,7 @@ use microbit::{
 };
 
 static GPIO: Mutex<RefCell<Option<Gpiote>>> = Mutex::new(RefCell::new(None));
-static MEASURINGSTATE: Mutex<RefCell<Measuring>> = Mutex::new(RefCell::new(Measuring {active: false, num_aves: 1}));
+static MEASURINGSTATE: Mutex<RefCell<Measuring>> = Mutex::new(RefCell::new(Measuring {active: true, num_aves: 8}));
 
 /// Initialise buttons and enable interrupts
 /// Taken from Discovery book from rust-embedded
