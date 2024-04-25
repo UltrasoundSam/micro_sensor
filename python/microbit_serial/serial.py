@@ -25,20 +25,8 @@ def parse_packet(conn: serial.Serial) -> tuple[float, int, int, int] | None:
     # Read in packet
     packet = read_packet(conn)
 
-    # Now we have a correctly formatted packet, we can unpack it
-    # as (f64, u8, f64, f64, f64, f64, f64, f64)
-    try:
-        # d - double (f64), B - unsigned char, c - char.
-        struct_fmt = '>dB6d'
-        result = struct.unpack(struct_fmt, packet)
-    except struct.error:
-        # Just going to be setup message at the start,
-        # can just ignore it for now
-        return
-
-    # Discard last two items (\r\n)
-    packet = result[:-2]
-    return packet
+    result = unpack_packet(packet)
+    return result
 
 
 def read_packet(conn: serial.Serial) -> bytearray:
@@ -66,3 +54,36 @@ def read_packet(conn: serial.Serial) -> bytearray:
     # Discard last two items (\r\n)
     packet = buff[:-2]
     return packet
+
+
+def unpack_packet(msg: bytearray) -> tuple[float, int, int, int] | None:
+    '''Unpacks the message
+
+    Given the data packet tuple is expected to be in the form of
+    (   f64,       u8,     f64,    f64,   f64,  f64,   f64,   f64)
+    (timestamp, num_aves, acc_x, acc_y, acc_z, mag_x, mag_y, mag_z)
+
+    Input:
+        msg - series of bytes to unpack
+
+  Returns:
+        result (tuple): Data packet tuple (see below) or None if not valid
+
+
+    NOTE: Data packet tuple is expected to be in the form of
+    (   f64,       u8,     f64,    f64,   f64,  f64,   f64,   f64)
+    (timestamp, num_aves, acc_x, acc_y, acc_z, mag_x, mag_y, mag_z)
+    '''
+    # Unpack msg as (f64, u8, f64, f64, f64, f64, f64, f64)
+    try:
+        # d - double (f64), B - unsigned char, c - char.
+        struct_fmt = '>dB6d'
+        result = struct.unpack(struct_fmt, msg)
+    except struct.error:
+        # Just going to be setup message at the start,
+        # can just ignore it for now
+        return
+
+    # Discard last two items (\r\n)
+    result = result[:-2]
+    return result
