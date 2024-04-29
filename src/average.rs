@@ -9,6 +9,7 @@ pub struct SimpleMovingAverage {
     mag_x: Vec<i32, 255>,
     mag_y: Vec<i32, 255>,
     mag_z: Vec<i32, 255>,
+    temp: Vec<f64, 255>,
 }
 
 impl SimpleMovingAverage {
@@ -21,6 +22,7 @@ impl SimpleMovingAverage {
             mag_x: Vec::new(),
             mag_y: Vec::new(),
             mag_z: Vec::new(),
+            temp: Vec::new(),
         }
     }
 
@@ -58,6 +60,15 @@ impl SimpleMovingAverage {
         }
     }
 
+    pub fn add_temp(&mut self, temp_reading: f64) {
+        // Push values onto vec
+        self.temp.push(temp_reading).unwrap();
+
+        if self.temp.len() as u8 > self.num_aves {
+            self.temp.remove(0);
+        }
+    }
+
     pub fn update_size(&mut self, new_size: u8) {
         self.num_aves = new_size;
     }
@@ -89,6 +100,13 @@ impl SimpleMovingAverage {
         let ave_y = sum_y as f64 / num_elems;
         let ave_z = sum_z as f64 / num_elems;
         let result = (ave_x, ave_y, ave_z);
+        result
+    }
+
+    pub fn get_temp_average(&self) -> f64 {
+        let sum_temp = self.temp.iter().fold(0., |acc, x| acc+x);
+        let num_elems = self.temp.len() as f64;
+        let result = sum_temp / num_elems;
         result
     }
 }

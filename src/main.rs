@@ -82,8 +82,10 @@ fn main() -> ! {
         // Read data
         let acc_data = sensor.acceleration().unwrap();
         let mag_data = sensor.magnetic_field().unwrap();
+        let temp_data: f64 = temperature.measure().to_num();
         aves.add_acceleration(acc_data);
         aves.add_magnetic(mag_data);
+        aves.add_temp(temp_data);
 
         serial.send_data(elapsed_time, &aves);
         rprintln!("x: {}, y: {}, z {}", acc_data.x_mg(), acc_data.y_mg(), acc_data.z_mg());
@@ -108,6 +110,9 @@ fn main() -> ! {
             let mag_data = sensor.magnetic_field().unwrap();
             aves.add_magnetic(mag_data);
         }
+
+        let temp: f64 = temperature.measure().to_num();
+        aves.add_temp(temp);
 
         current_time = timer.get_counter();
         diff = (current_time - previous_time) as f64 / clock_freq;

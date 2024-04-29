@@ -21,6 +21,7 @@ impl<T: Instance> UartePort<T> {
         let averages = ave_struct.get_num_aves();
         let acc_aves = ave_struct.get_acc_average();
         let mag_aves = ave_struct.get_mag_average();
+        let temp_aves = ave_struct.get_temp_average();
 
         // Send bytes
         self.conn.write(&averages.to_be_bytes()).unwrap();
@@ -30,6 +31,7 @@ impl<T: Instance> UartePort<T> {
         self.conn.write(&mag_aves.0.to_be_bytes()).unwrap();
         self.conn.write(&mag_aves.1.to_be_bytes()).unwrap();
         self.conn.write(&mag_aves.2.to_be_bytes()).unwrap();
+        self.conn.write(&temp_aves.to_be_bytes()).unwrap();
         self.conn.write_str("\r\n").unwrap();
     }
 
