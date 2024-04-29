@@ -4,8 +4,14 @@ Some useful helper functions for reading and parsing data from microbit
 import serial
 import struct
 
+data_packet = tuple[float,
+                    int,
+                    float, float, float,
+                    float, float, float,
+                    float]
 
-def parse_packet(conn: serial.Serial) -> tuple[float, int, int, int] | None:
+
+def parse_packet(conn: serial.Serial) -> data_packet | None:
     ''' Reads from socket and formats packet correctly.
 
     Reads information from serial port, and parses the packet correctly,
@@ -19,8 +25,8 @@ def parse_packet(conn: serial.Serial) -> tuple[float, int, int, int] | None:
 
 
     NOTE: Data packet tuple is expected to be in the form of
-    (   f64,       u8,     f64,    f64,   f64,  f64,   f64,   f64)
-    (timestamp, num_aves, acc_x, acc_y, acc_z, mag_x, mag_y, mag_z)
+    (   f64,       u8,     f64,   f64,   f64,   f64,   f64,   f64,  f64 )
+    (timestamp, num_aves, acc_x, acc_y, acc_z, mag_x, mag_y, mag_z, temp)
     '''
     # Read in packet
     packet = read_packet(conn)
@@ -56,12 +62,12 @@ def read_packet(conn: serial.Serial) -> bytearray:
     return packet
 
 
-def unpack_packet(msg: bytearray) -> tuple[float, int, int, int] | None:
+def unpack_packet(msg: bytearray) -> data_packet | None:
     '''Unpacks the message
 
     Given the data packet tuple is expected to be in the form of
-    (   f64,       u8,     f64,    f64,   f64,  f64,   f64,   f64)
-    (timestamp, num_aves, acc_x, acc_y, acc_z, mag_x, mag_y, mag_z)
+    (   f64,       u8,     f64,    f64,   f64,  f64,   f64,   f64,  f64 )
+    (timestamp, num_aves, acc_x, acc_y, acc_z, mag_x, mag_y, mag_z, temp)
 
     Input:
         msg - series of bytes to unpack
@@ -71,13 +77,13 @@ def unpack_packet(msg: bytearray) -> tuple[float, int, int, int] | None:
 
 
     NOTE: Data packet tuple is expected to be in the form of
-    (   f64,       u8,     f64,    f64,   f64,  f64,   f64,   f64)
-    (timestamp, num_aves, acc_x, acc_y, acc_z, mag_x, mag_y, mag_z)
+    (   f64,       u8,     f64,    f64,   f64,  f64,   f64,   f64,  f64 )
+    (timestamp, num_aves, acc_x, acc_y, acc_z, mag_x, mag_y, mag_z, temp)
     '''
-    # Unpack msg as (f64, u8, f64, f64, f64, f64, f64, f64)
+    # Unpack msg as (f64, u8, f64, f64, f64, f64, f64, f64, f64)
     try:
         # d - double (f64), B - unsigned char, c - char.
-        struct_fmt = '>dB6d'
+        struct_fmt = '>dB7d'
         result = struct.unpack(struct_fmt, msg)
     except struct.error:
         # Just going to be setup message at the start,
