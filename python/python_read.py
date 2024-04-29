@@ -9,7 +9,7 @@ def main():
 
     # Just continually read data
     while True:
-        res = microbit_serial.read_packet(ser)
+        res = microbit_serial.parse_packet(ser)
         print(res)
 
 

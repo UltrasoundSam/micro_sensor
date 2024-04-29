@@ -90,6 +90,4 @@ def unpack_packet(msg: bytearray) -> data_packet | None:
         # can just ignore it for now
         return
 
-    # Discard last two items (\r\n)
-    result = result[:-2]
     return result
