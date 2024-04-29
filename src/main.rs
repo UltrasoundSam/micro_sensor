@@ -6,7 +6,7 @@ use rtt_target::{rprintln, rtt_init_print};
 use panic_halt as _;
 
 use microbit::{
-    hal::{twim::Twim, uarte, Delay, Rtc},
+    hal::{twim::Twim, uarte, Delay, Rtc, Temp},
     pac::twim0::frequency::FREQUENCY_A,
 };
 
@@ -61,6 +61,9 @@ fn main() -> ! {
     sensor.set_accel_mode_and_odr(&mut delay, AccelMode::HighResolution, AccelOutputDataRate::Hz50).unwrap();
     sensor.set_mag_mode_and_odr(&mut delay, MagMode::HighResolution, MagOutputDataRate::Hz50).unwrap();
     let mut sensor = sensor.into_mag_continuous().ok().unwrap();
+
+    // Setup integrated temperature sensor
+    let mut temperature = Temp::new(board.TEMP);
 
     // Setup buttons
     control::init_buttons(board.GPIOTE, board.buttons);
@@ -118,9 +121,12 @@ fn main() -> ! {
                 // Send data
                 serial.send_data(elapsed_time, &aves);
 
+                // Measure data
+                let temp: f32 = temperature.measure().to_num();
+
                 // Create new averages
                 let num_averages = control::get_num_aves();
-                rprintln!("{}",num_averages);
+                rprintln!("{}", temp);
                 aves.update_size(num_averages);
             }
         }
