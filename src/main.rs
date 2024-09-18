@@ -1,139 +1,52 @@
 #![no_std]
 #![no_main]
 
-use cortex_m_rt::entry;
-use rtt_target::{rprintln, rtt_init_print};
-use panic_halt as _;
+mod button;
 
-use microbit::{
-    hal::{twim::Twim, uarte, Delay, Rtc, Temp},
-    pac::twim0::frequency::FREQUENCY_A,
-};
+use button::ButtonDirection;
+use embassy_executor::Spawner;
+use embassy_nrf::gpio::{AnyPin, Input, Level, Output, OutputDrive, Pin, Pull};
+use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
+use embassy_time::Timer;
+use panic_rtt_target as _;
 
-use lsm303agr::{
-    AccelMode, AccelOutputDataRate, Lsm303agr, MagMode, MagOutputDataRate,
-};
+static CHANNEL: Channel<ThreadModeRawMutex, ButtonDirection, 1> = Channel::new();
 
-mod serial_comms;
-mod control;
-mod average;
+#[embassy_executor::main]
+async fn main(spawner: Spawner) {
+    let p = embassy_nrf::init(Default::default());
 
-#[entry]
-fn main() -> ! {
-    // Setup board
-    rtt_init_print!();
-    let board = microbit::Board::take().unwrap();
+    spawner
+        .spawn(button_task(p.P0_14.degrade(), ButtonDirection::Left))
+        .unwrap();
+    spawner
+        .spawn(button_task(p.P0_23.degrade(), ButtonDirection::Right))
+        .unwrap();
 
-    // Define prescaler and frequency of clock
-    let prescaler: u32 = 0;
-    let clock_freq = 32_768f64 / (prescaler as f64 + 1.);
+    // Toggle LED
+    let mut led = led_pin(p.P0_28.degrade());
 
-    // Define counter to see how many milliseconds have passed.
-    let mut current_time: u32 = 0;
-    let mut previous_time : u32 = 0;
-    let mut elapsed_time: f64 = 0.;
-    let mut diff = (current_time - previous_time) as f64 / clock_freq;
-    elapsed_time += diff;
-
-    // Define delay (in seconds)
-    let interval = 1.;
-
-    // Creating timer for IMU and for timestamp
-    let mut delay = Delay::new(board.SYST);
-    let timer = Rtc::new(board.RTC0, prescaler).unwrap();
-    timer.enable_counter();
-
-    // Setup Serial Connection
-    let serial = uarte::Uarte::new(
-        board.UARTE0,
-        board.uart.into(),
-        uarte::Parity::EXCLUDED,
-        uarte::Baudrate::BAUD115200);
-    let mut serial = serial_comms::UartePort::new(serial);
-
-    // Set up i2c
-    serial.write_str("Setting up i2c and imu interface...").unwrap();
-    let i2c =  Twim::new(board.TWIM0, board.i2c_internal.into(), FREQUENCY_A::K100);
-
-    // Setup accelerometer and magnetometer sensors
-    let mut sensor = Lsm303agr::new_with_i2c(i2c);
-    sensor.init().unwrap();
-    sensor.set_accel_mode_and_odr(&mut delay, AccelMode::HighResolution, AccelOutputDataRate::Hz50).unwrap();
-    sensor.set_mag_mode_and_odr(&mut delay, MagMode::HighResolution, MagOutputDataRate::Hz50).unwrap();
-    let mut sensor = sensor.into_mag_continuous().ok().unwrap();
-
-    // Setup integrated temperature sensor
-    let mut temperature = Temp::new(board.TEMP);
-
-    // Setup buttons
-    control::init_buttons(board.GPIOTE, board.buttons);
-
-    // Create Struct to hold average values
-    let num_averages = control::get_num_aves();
-    let mut aves = average::SimpleMovingAverage::new(num_averages);
-
-    if sensor.accel_status().unwrap().xyz_new_data() {
-        // Get current time
-        current_time = timer.get_counter();
-        diff = (current_time - previous_time) as f64 / clock_freq;
-        previous_time = current_time;
-        elapsed_time += diff;
-
-        // Read data
-        let acc_data = sensor.acceleration().unwrap();
-        let mag_data = sensor.magnetic_field().unwrap();
-        let temp_data: f64 = temperature.measure().to_num();
-        aves.add_acceleration(acc_data);
-        aves.add_magnetic(mag_data);
-        aves.add_temp(temp_data);
-
-        serial.send_data(elapsed_time, &aves);
-        rprintln!("x: {}, y: {}, z {}", acc_data.x_mg(), acc_data.y_mg(), acc_data.z_mg());
+    loop{
+        led.toggle();
+        _ = Timer::after_millis(500);
     }
+}
 
-    // Update time just before loop
-    current_time = timer.get_counter();
-    diff = (current_time - previous_time) as f64 / clock_freq;
-    previous_time = current_time;
-    elapsed_time += diff;
+fn led_pin(pin: AnyPin) -> Output<'static> {
+    Output::new(pin, Level::High, OutputDrive::Standard)
+}
+
+
+#[embassy_executor::task(pool_size = 2)]
+async fn button_task(
+    pin: AnyPin,
+    direction: ButtonDirection,
+) {
+    let mut input = Input::new(pin, Pull::None);
     loop {
-        // Check if acceleration data is available
-        if sensor.accel_status().unwrap().xyz_new_data() {
-            // If it is, let's take a measurement
-            let acc_data = sensor.acceleration().unwrap();
-            aves.add_acceleration(acc_data);
-        }
-
-        // Check if magnetic field data is available
-        if sensor.mag_status().unwrap().xyz_new_data() {
-            // If it iss, let's take a measurement
-            let mag_data = sensor.magnetic_field().unwrap();
-            aves.add_magnetic(mag_data);
-        }
-
-        let temp: f64 = temperature.measure().to_num();
-        aves.add_temp(temp);
-
-        current_time = timer.get_counter();
-        diff = (current_time - previous_time) as f64 / clock_freq;
-        if diff >= interval as f64 {
-            // Update timings
-            timer.clear_counter();
-            previous_time = 0;
-            elapsed_time += diff;
-
-            if control::get_meas_state() {
-                // Send data
-                serial.send_data(elapsed_time, &aves);
-
-                // Measure data
-                let temp: f32 = temperature.measure().to_num();
-
-                // Create new averages
-                let num_averages = control::get_num_aves();
-                rprintln!("{}", temp);
-                aves.update_size(num_averages);
-            }
-        }
+        input.wait_for_low().await;
+        CHANNEL.send(direction).await;
+        Timer::after_millis(100).await;
+        input.wait_for_high().await;
     }
 }
