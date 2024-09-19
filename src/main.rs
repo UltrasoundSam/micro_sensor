@@ -7,7 +7,8 @@ mod sensors;
 
 use button::ButtonDirection;
 use embassy_executor::Spawner;
-use embassy_nrf::{self as hal, gpio::{AnyPin, Input, Level, Output, OutputDrive, Pin, Pull}, twim::Twim};
+use embassy_nrf::{self as hal, gpio::{AnyPin, Input, Level, Output, OutputDrive, Pin, Pull}, twim::Twim, temp};
+use embassy_nrf::temp::Temp;
 use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
 use embassy_time::Timer;
 use embassy_time::Delay;
@@ -23,12 +24,15 @@ static CHANNEL: Channel<ThreadModeRawMutex, ButtonDirection, 1> = Channel::new()
 
 hal::bind_interrupts!(struct Irqs {
     SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0 => twim::InterruptHandler<hal::peripherals::TWISPI0>;
+    TEMP => temp::InterruptHandler;
 });
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     rtt_init_print!();
     let p = embassy_nrf::init(Default::default());
+
+    let mut temp = Temp::new(p.TEMP, Irqs);
 
     spawner
         .spawn(button_task(p.P0_14.degrade(), ButtonDirection::Left))
@@ -88,6 +92,8 @@ async fn main(spawner: Spawner) {
         let accdata = sensor.acceleration().await.unwrap();
         datastore.add_accel(accdata);
     }
+    let temp_meas = temp.read().await.to_num::<f64>();
+    datastore.add_temp(temp_meas);
 
     // LED task:
     let mut blinker = LedRow::new(col);
@@ -100,8 +106,11 @@ async fn main(spawner: Spawner) {
         if sensor.accel_status().await.unwrap().xyz_new_data() {
             let accdata = sensor.acceleration().await.unwrap();
             datastore.add_accel(accdata);
-
         }
+
+        let temp_meas = temp.read().await.to_num::<f64>();
+        datastore.add_temp(temp_meas);
+
         select_biased! {
             direction = CHANNEL.receive().fuse() => {
                 blinker.shift(direction);
