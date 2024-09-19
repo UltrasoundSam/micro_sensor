@@ -4,7 +4,7 @@ use lsm303agr::{Acceleration, MagneticField};
 const MAX_SIZE: usize = 64;
 
 pub struct DataStore {
-    num_aves: u8,
+    pub num_aves: u8,
     acc: Vec<[i32; 3], MAX_SIZE>,
     mag: Vec<[i32; 3], MAX_SIZE>,
     temp: Vec<f64, MAX_SIZE>,
@@ -51,14 +51,6 @@ impl DataStore {
         }
 
         self.temp.push(temp_data).unwrap();
-    }
-
-    pub fn update_size(&mut self, new_size: u8) {
-        self.num_aves = new_size;
-    }
-
-    pub fn get_num_aves(&self) -> u8 {
-        self.num_aves
     }
 
     pub fn get_averages(&self) -> [f64; 7] {
