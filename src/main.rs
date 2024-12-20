@@ -7,7 +7,7 @@ mod sensors;
 
 use button::ButtonDirection;
 use embassy_executor::Spawner;
-use embassy_nrf::{self as hal, gpio::{AnyPin, Input, Level, Output, OutputDrive, Pin, Pull}, peripherals::TWISPI0, temp, twim::Twim};
+use embassy_nrf::{self as hal, gpio::{AnyPin, Input, Level, Output, OutputDrive, Pin, Pull}, peripherals::TWISPI0, temp, twim::Twim, uarte};
 use embassy_nrf::temp::Temp;
 use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, channel::Channel};
 use embassy_time::Timer;
@@ -84,12 +84,20 @@ async fn main(spawner: Spawner) {
         panic!("Error enabling continuous mode")
     };
 
-    let mut datastore = DataStore::new(8);
+    let num_aves = 8;
+    let mut datastore = DataStore::new(num_aves);
 
     read_data(&mut datastore, &mut sensor).await;
 
     let temp_meas = temp.read().await.to_num::<f64>();
     datastore.add_temp(temp_meas);
+
+    // Setup UARTE
+    let mut config = uarte::Config::default();
+    config.parity = uarte::Parity::EXCLUDED;
+    config.baudrate = uarte::Baudrate::BAUD115200;
+    let mut uart = uarte::Uarte::new(p.UARTE0, Irqs, p.P0_08, p.P0_06, config);
+    uart.write(b"AT\r\n").await.unwrap();
 
     // LED task:
     let mut blinker = LedRow::new(col);
@@ -108,6 +116,7 @@ async fn main(spawner: Spawner) {
             }
             _ = Timer::after_millis(500).fuse() => {
                 rprintln!("{:?}", datastore.get_averages());
+
             }
         }
     }
